@@ -3,18 +3,31 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title><link rel="manifest" href="manifest.webmanifest">
+<title>Book Cover to PDF Converter</title>
+
+<!-- PWA manifest and theme color -->
+<link rel="manifest" href="manifest.webmanifest">
 <meta name="theme-color" content="#000000">
+
 <script>
+  // Register unique service worker
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('service-worker.js')
       .then(() => console.log('KDP Bookcover SW registered'))
       .catch(err => console.warn('SW registration failed', err));
   }
-</script>Book Cover to PDF Converter</title>
-<meta name="description" content="Convert your book cover image into a high-quality PDF, ready for print platforms like Amazon KDP. Fast, private, and browser-based.">
+</script>
+
+<meta name="description" content="Convert your book cover image into a high-quality PDF, ready for print platforms like KDP. Fast, private, and browser-based.">
+
 <style>
   /* --- Converter layout --- */
+  body {
+    background: #fafafa;
+    margin: 0;
+    font-family: system-ui, sans-serif;
+  }
+
   #amazon-converter {
     box-sizing: border-box;
     width: 100%;
@@ -24,7 +37,6 @@
     border-radius: 16px;
     padding: 20px;
     box-shadow: 0 6px 18px rgba(0,0,0,.08);
-    font-family: system-ui, sans-serif;
   }
 
   #amazon-converter .intro {
