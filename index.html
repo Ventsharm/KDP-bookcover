@@ -1,257 +1,267 @@
-<!doctype html>  
-<html lang="en">  
-<head>  
-<meta charset="utf-8" />  
-<meta name="viewport" content="width=device-width,initial-scale=1" />  
-<title>Book Cover to PDF Converter</title>  
-  
-<!-- PWA manifest and theme color -->  
-<link rel="manifest" href="manifest.webmanifest">  
-<meta name="theme-color" content="#000000">  
-  
-<script>  
-  // Register unique service worker  
-  if ('serviceWorker' in navigator) {  
-    navigator.serviceWorker.register('service-worker.js')  
-      .then(() => console.log('KDP Bookcover SW registered'))  
-      .catch(err => console.warn('SW registration failed', err));  
-  }  
-</script>  
-  
-<meta name="description" content="Convert your book cover image into a high-quality PDF, ready for print platforms like KDP. Fast, private, and browser-based.">  
-  
-<style>  
-  /* --- Converter layout --- */  
-  body {  
-    background: #fafafa;  
-    margin: 0;  
-    font-family: system-ui, sans-serif;  
-  }  
-  
-  #amazon-converter {  
-    box-sizing: border-box;  
-    width: 100%;  
-    max-width: 680px;  
-    margin: 40px auto;  
-    background: #fff;  
-    border-radius: 16px;  
-    padding: 20px;  
-    box-shadow: 0 6px 18px rgba(0,0,0,.08);  
-  }  
-  
-  #amazon-converter .intro {  
-    color: #333;  
-    margin-bottom: 16px;  
-    line-height: 1.6;  
-    font-size: 15px;  
-  }  
-  
-  #amazon-converter .row {  
-    display: flex;  
-    flex-wrap: wrap;  
-    gap: 20px;  
-  }  
-  
-  #amazon-converter .col {  
-    flex: 1 1 320px;  
-  }  
-  
-  #amazon-converter .drop {  
-    border: 2px dashed #bbb;  
-    border-radius: 14px;  
-    padding: 24px;  
-    text-align: center;  
-    background: #fcfcfc;  
-  }  
-  
-  #amazon-converter .drop.drag {  
-    border-color: #4f46e5;  
-    background: #f5f7ff;  
-  }  
-  
-  #amazon-converter input[type="file"] { display: none; }  
-  
-  #amazon-converter .btn {  
-    cursor: pointer;  
-    display: inline-block;  
-    border-radius: 12px;  
-    padding: 10px 16px;  
-    border: 1px solid #111;  
-    background: #111;  
-    color: #fff;  
-    font-weight: 600;  
-  }  
-  
-  #amazon-converter .btn:disabled { opacity: .5; cursor: not-allowed; }  
-  
-  #amazon-converter .muted { color: #666; }  
-  
-  #amazon-converter img#preview {  
-    max-width: 100%;  
-    border-radius: 12px;  
-    display: block;  
-  }  
-  
-  #amazon-converter .line {  
-    border-top: 1px solid #eee;  
-    margin: 18px 0;  
-  }  
-  
-  #amazon-converter label { display: block; margin: 10px 0 6px; font-weight: 600; }  
-  
-  #amazon-converter .inline {  
-    display: flex;  
-    gap: 10px;  
-    align-items: center;  
-    flex-wrap: wrap;  
-  }  
-  
-  #amazon-converter input[type="number"] { width: 80px; }  
-  
-  #amazon-converter #result {  
-    transition: color 0.3s ease;  
-  }  
-  
-  #amazon-converter #result.success {  
-    color: #1a7f37;  
-    font-weight: 600;  
-  }  
-  
-  @media (max-width:600px){  
-    #amazon-converter { padding:16px; border-radius:12px; }  
-  }  
-</style>  
-</head>  
-<body>  
-  
-<div id="amazon-converter">  
-  <p class="intro">  
-    <strong>Convert your book cover image into a print-ready PDF in seconds.</strong><br>  
-    Perfect for authors and self-publishers preparing covers for <strong>KDP</strong> and other print platforms.  
-  </p>  
-  
-  <div class="row">  
-    <div class="col">  
-      <div id="drop" class="drop">  
-        <p><strong>Drop image here</strong> or <label for="file" style="color:#4f46e5;cursor:pointer;">browse</label></p>  
-        <input id="file" type="file" accept="image/*"/>  
-      </div>  
-  
-      <div class="line"></div>  
-  
-      <label>PDF Page Options</label>  
-      <div class="inline">  
-        <label class="inline"><input type="radio" name="mode" value="match"> Match image size (keep ratio)</label>  
-        <label class="inline"><input type="radio" name="mode" value="custom" checked> Custom inches:</label>  
-        <label>W <input id="inchW" type="number" value="12.39" step="0.01"> in</label>  
-        <label>H <input id="inchH" type="number" value="9.25" step="0.01"> in</label>  
-      </div>  
-  
-      <div style="margin-top:12px;">  
-        <button id="make" class="btn" disabled>Download PDF</button>  
-        <span id="result" class="muted" style="margin-left:10px;"></span>  
-      </div>  
-    </div>  
-  
-    <div class="col">  
-      <img id="preview" alt="Preview"/>  
-      <div id="meta" class="muted" style="margin-top:10px;"></div>  
-    </div>  
-  </div>  
-</div>  
-  
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>  
-<script>  
-const $=s=>document.querySelector(s);  
-const fileInput=$('#file'),drop=$('#drop'),preview=$('#preview'),meta=$('#meta'),make=$('#make'),result=$('#result');  
-const inchW=$('#inchW'),inchH=$('#inchH');  
-let w=0,h=0,imgEl=null,imgName='image',imgType='JPEG';  
-const defaultDPI = 300;  
-  
-['dragenter','dragover'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add('drag');}));  
-['dragleave','drop'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove('drag');}));  
-drop.addEventListener('drop',e=>{  
-  const f=e.dataTransfer.files?.[0];  
-  if(f) handleFile(f);  
-});  
-drop.addEventListener('click',()=>fileInput.click());  
-fileInput.addEventListener('change',e=>{  
-  const f=e.target.files?.[0];  
-  if(f) {  
-    handleFile(f);  
-    // ✅ Reset input so selecting the same file again works without reopening automatically
-    fileInput.value = '';  
-  }  
-});  
-  
-function handleFile(file){  
-  if(!file.type.startsWith('image/')) return alert('Please choose an image.');  
-  result.textContent = '';  
-  result.classList.remove('success');  
-  imgName=file.name.replace(/\.[^.]+$/,'');  
-  const r=new FileReader();  
-  r.onload=()=>{  
-    const i=new Image();  
-    i.onload=()=>{  
-      imgEl=i;  
-      w=i.width;  
-      h=i.height;  
-      preview.src=i.src;  
-      imgType=/png$/i.test(file.type)?'PNG':'JPEG';  
-      showMeta();  
-      make.disabled=false;  
-    };  
-    i.src=r.result;  
-  };  
-  r.readAsDataURL(file);  
-}  
-  
-function pxToIn(px,dpi){return +(px/dpi).toFixed(3);}  
-  
-function showMeta(){  
-  const wi=pxToIn(w,defaultDPI),hi=pxToIn(h,defaultDPI);  
-  meta.innerHTML=`  
-  <div><strong>Pixels:</strong> ${w} × ${h}</div>  
-  <div><strong>Inches:</strong> ${wi}" × ${hi}"</div>  
-  <div class="muted">${w>h?'Landscape':'Portrait'}</div>`;  
-}  
-  
-make.addEventListener('click',()=>{  
-  if(!imgEl) return;  
-  const {jsPDF}=window.jspdf;  
-  const mode=document.querySelector('input[name="mode"]:checked').value;  
-  result.textContent='Generating...';  
-  result.classList.remove('success');  
-  
-  let pdfWIn, pdfHIn;  
-  if(mode==='match'){  
-    pdfWIn=pxToIn(w,defaultDPI); pdfHIn=pxToIn(h,defaultDPI);  
-  } else {  
-    pdfWIn=+inchW.value; pdfHIn=+inchH.value;  
-  }  
-  
-  const pdfWpt=pdfWIn*72, pdfHpt=pdfHIn*72;  
-  const doc=new jsPDF({orientation:w>h?'l':'p',unit:'pt',format:[pdfWpt,pdfHpt]});  
-  let drawW=pdfWpt, drawH=pdfHpt, x=0, y=0;  
-  
-  if(mode==='custom'){  
-    const aspect=pdfWpt/pdfHpt;  
-    const imgAspect=w/h;  
-    if(Math.abs(aspect-imgAspect)>0.01){  
-      if(imgAspect>aspect){ drawW=pdfWpt; drawH=pdfWpt/imgAspect; y=(pdfHpt-drawH)/2; }  
-      else { drawH=pdfHpt; drawW=pdfHpt*imgAspect; x=(pdfWpt-drawW)/2; }  
-    }  
-  }  
-  
-  doc.addImage(imgEl,imgType,x,y,drawW,drawH,undefined,'FAST');  
-  const modeSuffix = mode === 'custom'  
-    ? `_custom_${pdfWIn.toFixed(2)}x${pdfHIn.toFixed(2)}in`  
-    : `_match`;  
-  const fileName = `${imgName}${modeSuffix}.pdf`;  
-  doc.save(fileName);  
-  result.innerHTML = `PDF downloaded — <strong>${pdfWIn.toFixed(2)}" × ${pdfHIn.toFixed(2)}"</strong>`;  
-  result.classList.add('success');  
-});  
-</script>  
-</body>  
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Book Cover to PDF Converter</title>
+
+<!-- PWA manifest and theme color -->
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#000000">
+
+<script>
+  // Register unique service worker
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('service-worker.js')
+      .then(() => console.log('KDP Bookcover SW registered'))
+      .catch(err => console.warn('SW registration failed', err));
+  }
+</script>
+
+<meta name="description" content="Convert your book cover image into a high-quality PDF, ready for print platforms like KDP. Fast, private, and browser-based.">
+
+<style>
+  body {
+    background: #fafafa;
+    margin: 0;
+    font-family: system-ui, sans-serif;
+  }
+
+  #amazon-converter {
+    box-sizing: border-box;
+    width: 100%;
+    max-width: 680px;
+    margin: 40px auto;
+    background: #fff;
+    border-radius: 16px;
+    padding: 20px;
+    box-shadow: 0 6px 18px rgba(0,0,0,.08);
+  }
+
+  #amazon-converter .intro {
+    color: #333;
+    margin-bottom: 16px;
+    line-height: 1.6;
+    font-size: 15px;
+  }
+
+  #amazon-converter .row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 20px;
+  }
+
+  #amazon-converter .col {
+    flex: 1 1 320px;
+  }
+
+  #amazon-converter .drop {
+    border: 2px dashed #bbb;
+    border-radius: 14px;
+    padding: 24px;
+    text-align: center;
+    background: #fcfcfc;
+  }
+
+  #amazon-converter .drop.drag {
+    border-color: #4f46e5;
+    background: #f5f7ff;
+  }
+
+  #amazon-converter input[type="file"] { display: none; }
+
+  #amazon-converter .btn {
+    cursor: pointer;
+    display: inline-block;
+    border-radius: 12px;
+    padding: 10px 16px;
+    border: 1px solid #111;
+    background: #111;
+    color: #fff;
+    font-weight: 600;
+  }
+
+  #amazon-converter .btn:disabled { opacity: .5; cursor: not-allowed; }
+
+  #amazon-converter .muted { color: #666; }
+
+  #amazon-converter img#preview {
+    max-width: 100%;
+    border-radius: 12px;
+    display: block;
+  }
+
+  #amazon-converter .line {
+    border-top: 1px solid #eee;
+    margin: 18px 0;
+  }
+
+  #amazon-converter label { display: block; margin: 10px 0 6px; font-weight: 600; }
+
+  #amazon-converter .inline {
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-wrap: wrap;
+  }
+
+  #amazon-converter input[type="number"] { width: 80px; }
+
+  #amazon-converter #result { transition: color 0.3s ease; }
+
+  #amazon-converter #result.success {
+    color: #1a7f37;
+    font-weight: 600;
+  }
+
+  @media (max-width:600px){
+    #amazon-converter { padding:16px; border-radius:12px; }
+  }
+</style>
+</head>
+<body>
+
+<div id="amazon-converter">
+  <p class="intro">
+    <strong>Convert your book cover image into a print-ready PDF in seconds.</strong><br>
+    Perfect for authors and self-publishers preparing covers for <strong>KDP</strong> and other print platforms.
+  </p>
+
+  <div class="row">
+    <div class="col">
+      <div id="drop" class="drop">
+        <p><strong>Drop image here</strong> or <label for="file" style="color:#4f46e5;cursor:pointer;">browse</label></p>
+        <input id="file" type="file" accept="image/*"/>
+      </div>
+
+      <div class="line"></div>
+
+      <label>PDF Page Options</label>
+      <div class="inline">
+        <label class="inline"><input type="radio" name="mode" value="match"> Match image size (keep ratio)</label>
+        <label class="inline"><input type="radio" name="mode" value="custom" checked> Custom inches:</label>
+        <label>W <input id="inchW" type="number" value="12.39" step="0.01"> in</label>
+        <label>H <input id="inchH" type="number" value="9.25" step="0.01"> in</label>
+      </div>
+
+      <div style="margin-top:12px;">
+        <button id="make" class="btn" disabled>Download PDF</button>
+        <span id="result" class="muted" style="margin-left:10px;"></span>
+      </div>
+    </div>
+
+    <div class="col">
+      <img id="preview" alt="Preview"/>
+      <div id="meta" class="muted" style="margin-top:10px;"></div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script>
+const $=s=>document.querySelector(s);
+const fileInput=$('#file'),drop=$('#drop'),preview=$('#preview'),meta=$('#meta'),make=$('#make'),result=$('#result');
+const inchW=$('#inchW'),inchH=$('#inchH');
+let w=0,h=0,imgEl=null,imgName='image',imgType='JPEG';
+const defaultDPI = 300;
+
+// Drag events
+['dragenter','dragover'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add('drag');}));
+['dragleave','drop'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove('drag');}));
+drop.addEventListener('drop',e=>{
+  const f=e.dataTransfer.files?.[0];
+  if(f) handleFile(f);
+});
+
+// Click events — prevent double triggering
+drop.addEventListener('click',e=>{
+  e.stopPropagation();
+  fileInput.click();
+});
+
+fileInput.addEventListener('click',e=>{
+  // stop bubbling to prevent flicker re-open
+  e.stopPropagation();
+});
+
+fileInput.addEventListener('change',e=>{
+  e.stopPropagation();
+  const f=e.target.files?.[0];
+  if(f) {
+    handleFile(f);
+    // clear after use so selecting the same file again works
+    fileInput.value = '';
+  }
+});
+
+function handleFile(file){
+  if(!file.type.startsWith('image/')) return alert('Please choose an image.');
+  result.textContent = '';
+  result.classList.remove('success');
+  imgName=file.name.replace(/\.[^.]+$/,'');
+  const r=new FileReader();
+  r.onload=()=>{
+    const i=new Image();
+    i.onload=()=>{
+      imgEl=i;
+      w=i.width;
+      h=i.height;
+      preview.src=i.src;
+      imgType=/png$/i.test(file.type)?'PNG':'JPEG';
+      showMeta();
+      make.disabled=false;
+    };
+    i.src=r.result;
+  };
+  r.readAsDataURL(file);
+}
+
+function pxToIn(px,dpi){return +(px/dpi).toFixed(3);}
+
+function showMeta(){
+  const wi=pxToIn(w,defaultDPI),hi=pxToIn(h,defaultDPI);
+  meta.innerHTML=`
+  <div><strong>Pixels:</strong> ${w} × ${h}</div>
+  <div><strong>Inches:</strong> ${wi}" × ${hi}"</div>
+  <div class="muted">${w>h?'Landscape':'Portrait'}</div>`;
+}
+
+make.addEventListener('click',()=>{
+  if(!imgEl) return;
+  const {jsPDF}=window.jspdf;
+  const mode=document.querySelector('input[name="mode"]:checked').value;
+  result.textContent='Generating...';
+  result.classList.remove('success');
+
+  let pdfWIn, pdfHIn;
+  if(mode==='match'){
+    pdfWIn=pxToIn(w,defaultDPI); pdfHIn=pxToIn(h,defaultDPI);
+  } else {
+    pdfWIn=+inchW.value; pdfHIn=+inchH.value;
+  }
+
+  const pdfWpt=pdfWIn*72, pdfHpt=pdfHIn*72;
+  const doc=new jsPDF({orientation:w>h?'l':'p',unit:'pt',format:[pdfWpt,pdfHpt]});
+  let drawW=pdfWpt, drawH=pdfHpt, x=0, y=0;
+
+  if(mode==='custom'){
+    const aspect=pdfWpt/pdfHpt;
+    const imgAspect=w/h;
+    if(Math.abs(aspect-imgAspect)>0.01){
+      if(imgAspect>aspect){ drawW=pdfWpt; drawH=pdfWpt/imgAspect; y=(pdfHpt-drawH)/2; }
+      else { drawH=pdfHpt; drawW=pdfHpt*imgAspect; x=(pdfWpt-drawW)/2; }
+    }
+  }
+
+  doc.addImage(imgEl,imgType,x,y,drawW,drawH,undefined,'FAST');
+  const modeSuffix = mode === 'custom'
+    ? `_custom_${pdfWIn.toFixed(2)}x${pdfHIn.toFixed(2)}in`
+    : `_match`;
+  const fileName = `${imgName}${modeSuffix}.pdf`;
+  doc.save(fileName);
+  result.innerHTML = `PDF downloaded — <strong>${pdfWIn.toFixed(2)}" × ${pdfHIn.toFixed(2)}"</strong>`;
+  result.classList.add('success');
+});
+</script>
+</body>
 </html>
