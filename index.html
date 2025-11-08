@@ -5,14 +5,15 @@
 <meta name="viewport" content="width=device-width,initial-scale=1" />
 <title>Book Cover to PDF Converter</title>
 
-<!-- PWA manifest and theme color -->
-<link rel="manifest" href="manifest.webmanifest">
+<!-- ✅ PWA setup -->
+<link rel="manifest" href="./manifest.webmanifest">
 <meta name="theme-color" content="#000000">
+<meta name="apple-mobile-web-app-capable" content="yes">
 
 <script>
-  // Register unique service worker
+  // ✅ Register unique service worker
   if ('serviceWorker' in navigator) {
-    navigator.serviceWorker.register('service-worker.js')
+    navigator.serviceWorker.register('./service-worker.js')
       .then(() => console.log('KDP Bookcover SW registered'))
       .catch(err => console.warn('SW registration failed', err));
   }
@@ -26,7 +27,6 @@
   #amazon-converter .intro { color:#333; margin-bottom:16px; line-height:1.6; font-size:15px; }
   #amazon-converter .row { display:flex; flex-wrap:wrap; gap:20px; }
   #amazon-converter .col { flex:1 1 320px; }
-  /* Make the entire drop area a label for clean file picking */
   #drop { border:2px dashed #bbb; border-radius:14px; padding:24px; text-align:center; background:#fcfcfc; display:block; cursor:pointer; user-select:none; }
   #drop.drag { border-color:#4f46e5; background:#f5f7ff; }
   #file { position:absolute; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0,0,0,0); border:0; }
@@ -53,7 +53,6 @@
 
   <div class="row">
     <div class="col">
-      <!-- Native label triggers file input cleanly -->
       <label id="drop" for="file">
         <p><strong>Drop image here</strong> or <span style="color:#4f46e5; text-decoration:underline;">browse</span></p>
       </label>
